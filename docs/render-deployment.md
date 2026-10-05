@@ -127,6 +127,8 @@ No domain/DNS task is required. No deployment is triggered by this adaptation; c
 
 If startup fails, the launcher emits render_start_failed with fixed stage/reason labels. Raw exception text, environment values and child output remain suppressed. The [diagnostic patch guide](render-startup-diagnostic.md) explains the labels and the narrow manual retry procedure. The first operator-reported Render startup failure has not yet been diagnosed; this logging patch makes its next failure actionable without changing application behavior or weakening deployment validation.
 
+The subsequent operator log confirms storage/permission_denied before SQLite initialization. The [storage permission follow-up](render-storage-permissions.md) corrects the wrapper's unconditional mount-root chmod assumption: a foreign-owned writable managed root is preserved, while private app-directory/file permissions remain mandatory. More precise storage-stage labels identify any remaining failure. Actual hosted recovery and the original failing syscall remain unconfirmed until the next manual deployment.
+
 ## Verification report and limits
 
 Local verification covers the complete regression suite, typecheck/build, official Blueprint schema plus the known disk restriction, strict derived origin, public path smoke, consumer/merchant routes and assets, same-origin cookie/CSRF/Origin isolation, anonymous merchant projection, read-only simulator, PWA assets/offline rules, disabled push/Activity, exact fake-gateway callback URLs, restart persistence, child failure/shutdown and protected reset/refusal. Browser evidence must be distinguished from physical hosted/device evidence.

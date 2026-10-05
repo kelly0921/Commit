@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createECDH} from 'node:crypto';
-import {existsSync,lstatSync,realpathSync,readFileSync,chmodSync,mkdirSync} from 'node:fs';
+import {existsSync,lstatSync,realpathSync,readFileSync,chmodSync,mkdirSync,accessSync,constants} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {requireStartup,startupStep} from './diagnostics.mjs';
 
@@ -70,17 +70,31 @@ export function guardStorage(config){
     assert.equal(realpathSync(config.root),resolve(config.root));assert.ok(!lstatSync(config.root).isSymbolicLink());
   }else{
     requireStartup(process.platform==='linux','storage','unsupported_platform');exactDisk(config.root);
-    const mounts=readFileSync('/proc/self/mountinfo','utf8').split('\n').map(line=>line.split(' ')[4]?.replace(/\\040/g,' '));
-    requireStartup(mounts.includes(DISK),'storage','disk_mount_not_detected');
+    const mounts=startupStep('storage_mount_probe',()=>readFileSync('/proc/self/mountinfo','utf8').split('\n').map(line=>line.split(' ')[4]?.replace(/\\040/g,' ')),'storage_prepare_failed');
+    requireStartup(mounts.includes(DISK),'storage_mount_probe','disk_mount_not_detected');
   }
   assert.equal(config.database,join(config.root,'staging.sqlite'));
   for(const name of DATABASE_FILES){const path=join(config.root,name);if(existsSync(path))assert.ok(lstatSync(path).isFile()&&!lstatSync(path).isSymbolicLink(),'Unexpected database resource');}
 }
 
-export function prepareStorage(config){
-  guardStorage(config);chmodSync(config.root,0o700);
+export function prepareStorage(config,fs={existsSync,lstatSync,realpathSync,chmodSync,mkdirSync,accessSync,geteuid:()=>process.geteuid?.()}){
+  startupStep('storage_disk_guard',()=>guardStorage(config),'storage_prepare_failed');
+  const uid=fs.geteuid();
+  startupStep('storage_root_permissions',()=>{
+    const stat=fs.lstatSync(config.root);
+    // A provider-owned writable mount is not an application-owned resource.
+    // Preserve its ownership/mode; only harden the root when we own it.
+    if(uid===undefined||stat.uid===uid)fs.chmodSync(config.root,0o700);
+  },'storage_prepare_failed');
+  startupStep('storage_access',()=>fs.accessSync(config.root,constants.R_OK|constants.W_OK|constants.X_OK),'storage_prepare_failed');
   for(const name of ['runtime','tmp','backups']){
-    const dir=join(config.root,name);if(!existsSync(dir))mkdirSync(dir,{mode:0o700});
-    assert.equal(realpathSync(dir),resolve(dir));assert.ok(lstatSync(dir).isDirectory()&&!lstatSync(dir).isSymbolicLink());chmodSync(dir,0o700);
+    const stage='storage_'+name+'_directory';
+    startupStep(stage,()=>{
+      const dir=join(config.root,name);if(!fs.existsSync(dir))fs.mkdirSync(dir,{mode:0o700});
+      requireStartup(fs.realpathSync(dir)===resolve(dir),stage,'unsafe_storage_path');
+      const stat=fs.lstatSync(dir);requireStartup(stat.isDirectory()&&!stat.isSymbolicLink(),stage,'invalid_storage_resource');
+      requireStartup(uid===undefined||stat.uid===uid,stage,'invalid_storage_owner');
+      fs.chmodSync(dir,0o700); // Mandatory for app-owned private resources.
+    },'storage_prepare_failed');
   }
 }

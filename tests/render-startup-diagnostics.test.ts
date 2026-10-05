@@ -49,7 +49,7 @@ test('child IPC accepts only the correct runtime and finite diagnostic labels',(
 
 test('real storage preparation failure retains its stage without disclosing paths',async()=>{
   const config=await fixture();writeFileSync(join(config.root,'runtime'),privateText);
-  await assert.rejects(startLauncher(config,{control:false,onEvent:()=>{}}),(error:unknown)=>{const result=record(error);assert.equal(result.stage,'storage');assert.equal(result.reason,'storage_prepare_failed');return true;});
+  await assert.rejects(startLauncher(config,{control:false,onEvent:()=>{}}),(error:unknown)=>{const result=record(error);assert.equal(result.stage,'storage_runtime_directory');assert.equal(result.reason,'invalid_storage_resource');return true;});
   const fs={realpathSync:()=>{throw Object.assign(new Error(privateText),{code:'EACCES'});}};
   assert.throws(()=>diagnostics.startupStep('storage',()=>configuration.exactDisk(configuration.DISK,fs),'storage_prepare_failed'),(error:unknown)=>{assert.deepEqual(record(error),{event:'render_start_failed',stage:'storage',reason:'permission_denied'});return true;});
 });
