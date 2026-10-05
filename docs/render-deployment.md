@@ -25,7 +25,7 @@ One paid Render web service, one instance and one 1 GB persistent disk keep both
 
 ## Blueprint and build
 
-[render.yaml](../render.yaml) defines the Node native runtime, tested Node 24.17.0, paid `1c-2g` compute, one instance, disk mount, `/health`, 60-second shutdown allowance and manual deployments. No custom domains or live secret values are embedded. [Render Blueprint reference](https://render.com/docs/blueprint-spec), [Node version selection](https://render.com/docs/node-version).
+[render.yaml](../render.yaml) defines the Node native runtime, tested Node 24.17.0, paid `1c-2g` compute, one instance, disk mount, `/health` and manual deployments. It omits `maxShutdownDelaySeconds`: Render's backend rejects that override for a service with a disk, so platform defaults apply. No custom domains or live secret values are embedded. [Render Blueprint reference](https://render.com/docs/blueprint-spec), [Node version selection](https://render.com/docs/node-version).
 
 Build: `npm ci --include=dev && node deploy/render/build.mjs`.
 
@@ -64,7 +64,7 @@ The launcher supervises the gateway and two Node children. The consumer runs the
 
 Both children must report ready before business requests pass. Child startup has a 60-second bound. If either unexpectedly exits, the public gateway becomes unavailable, its sibling stops, and the launcher exits unsuccessfully so Render can restart the whole instance. It never intentionally serves half the application.
 
-SIGTERM/SIGINT handlers are installed before asynchronous startup. Shutdown stops new gateway work, stops new coordinator ticks, closes child HTTP listeners, waits for accepted requests and the existing worker drain, then closes SQLite and IPC. The launcher allows 45 seconds before forced child termination, within Render's configured 60-second maximum. Durable operation keys and event leases remain in SQLite if forced termination is necessary; the existing recovery path handles them after restart. The wrapper does not erase leases, invent completion or grant consent. [Render deploy/shutdown behavior](https://render.com/docs/deploys).
+SIGTERM/SIGINT handlers are installed before asynchronous startup. Shutdown stops new gateway work, stops new coordinator ticks, closes child HTTP listeners, waits for accepted requests and the existing worker drain, then closes SQLite and IPC. The launcher allows 25 seconds before forced child termination, leaving headroom below Render's documented 30-second default. No custom platform delay is requested for this disk-backed service. Durable operation keys and event leases remain in SQLite if forced termination is necessary; the existing recovery path handles them after restart. The wrapper does not erase leases, invent completion or grant consent. [Render deploy/shutdown behavior](https://render.com/docs/deploys#graceful-shutdown).
 
 ## Environment variables
 
@@ -148,6 +148,12 @@ Render hosts Commit's durable application runtime, including the background coor
 This is the intended infrastructure story for a completed deployment. At this checkpoint the configuration is prepared, and Render hosting has not yet occurred. The project uses a Render web service and persistent disk; it does not claim Render Workflow usage or add sponsor-only product features.
 
 ## Acceptance receipts
+
+October 5 follow-up: the initial published Blueprint passed the official JSON Schema but was rejected by Render's backend because `maxShutdownDelaySeconds` cannot be combined with a disk. The field has been removed and the deployment wrapper's deadline shortened from 45 to 25 seconds. A regression check forbids this disk-incompatible field, and a local shutdown test covers an unresponsive child. The original schema/test/publication receipts and prior configuration are preserved; schema validation alone does not establish backend acceptance. The user must retry the corrected Blueprint in Render to verify account-side acceptance. No deployment or live payment operation is initiated by this correction.
+
+The table below records the original Phase 6.1B local acceptance; follow-up results are retained separately under `docs/assets/phase-6-1b-render-shutdown-fix/`.
+
+Correction acceptance: **298/298 tests PASS**, typecheck/build PASS, official-schema and observed disk-rule checks PASS, and configured-secret scan PASS. All 506 protected files and eight historical databases remain unchanged. The commit changes only this deployment documentation, the Blueprint, the launcher's shutdown deadline and deployment tests. Account-side Blueprint acceptance and actual Render shutdown behavior still require hosted verification.
 
 | Check | Final local result |
 | --- | --- |

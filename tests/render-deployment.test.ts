@@ -74,6 +74,14 @@ test('unexpected child exit closes gateway and sibling so no half application re
 test('graceful deployment stop closes both children, SQLite and public listener',async()=>{
   const config=databaseConfig(await fixture()),shutdown=new AbortController(),runtime=await startLauncher(config,{control:false,onEvent:()=>{},signal:shutdown.signal});shutdown.abort();assert.equal(await runtime.closed,0);assert.equal(runtime.children().size,0);assert.equal(runtime.gateway.listening,false);const db=new DatabaseSync(config.database);try{assert.equal((db.prepare('PRAGMA integrity_check').get() as any).integrity_check,'ok');}finally{db.close();}
 });
+
+test('shutdown deadline terminates an unresponsive child and preserves database integrity',async()=>{
+  const f=await start(),child=f.runtime.children().get('merchant'),send=child.send.bind(child);
+  child.send=(message:any,...args:any[])=>message?.type==='shutdown'?true:send(message,...args);
+  const started=Date.now();await f.runtime.stop();
+  assert.equal(await f.runtime.closed,0);assert.equal(child.signalCode,'SIGKILL');assert.equal(f.runtime.gateway.listening,false);assert.equal(f.runtime.children().size,0);assert.ok(Date.now()-started<10000);
+  const db=new DatabaseSync(f.config.database,{readOnly:true});try{assert.equal((db.prepare('PRAGMA integrity_check').get() as any).integrity_check,'ok');assert.equal((db.prepare('SELECT COUNT(*) AS n FROM commitments').get() as any).n,0);}finally{db.close();}
+});
 test('protected disposable reset quiesces children, retains a private backup and restarts cleanly',async()=>{
   const f=await start();try{const host=new URL(consumer).host,s=await get(f.runtime,host,'/api/session');await get(f.runtime,host,'/api/demo',{method:'POST',body:{},headers:{cookie:s.headers['set-cookie'][0].split(';')[0],origin:consumer,'x-csrf-token':JSON.parse(s.body).csrfToken}});
     const result=await f.runtime.reset();assert.ok(result.backup.startsWith(join(f.config.root,'backups')));assert.ok(existsSync(join(result.backup,'staging.sqlite')));assert.equal(await f.runtime.health(),true);
@@ -89,5 +97,5 @@ test('reset refuses an ambiguous payment attempt without provider cleanup or del
   }finally{await current.stop();}
 });
 test('Render blueprint declares only one paid Node web service/disk with operator-supplied secrets',()=>{
-  const yaml=readFileSync('render.yaml','utf8');assert.equal((yaml.match(/^  - type: web$/gm)||[]).length,1);assert.match(yaml,/numInstances: 1/);assert.match(yaml,/plan: 1c-2g/);assert.match(yaml,/mountPath: \/var\/data\/commit/);assert.match(yaml,/healthCheckPath: \/health/);assert.match(yaml,/maxShutdownDelaySeconds: 60/);assert.match(yaml,/autoDeployTrigger: 'off'/);assert.doesNotMatch(yaml,/^\s+(?:domains|preDeployCommand|scaling):/m);for(const key of ['PAYPAL_CLIENT_SECRET','OPENAI_API_KEY','AG_STUDIO_LICENSE_KEY','WEB_PUSH_VAPID_PRIVATE_KEY','STAGING_ACCESS_PASSWORD'])assert.match(yaml,new RegExp('key: '+key+'\\s+sync: false'));
+  const yaml=readFileSync('render.yaml','utf8');assert.equal((yaml.match(/^  - type: web$/gm)||[]).length,1);assert.match(yaml,/numInstances: 1/);assert.match(yaml,/plan: 1c-2g/);assert.match(yaml,/mountPath: \/var\/data\/commit/);assert.match(yaml,/healthCheckPath: \/health/);assert.doesNotMatch(yaml,/^\s*maxShutdownDelaySeconds:/m,'Render rejects custom shutdown delay with a disk');assert.match(yaml,/autoDeployTrigger: 'off'/);assert.doesNotMatch(yaml,/^\s+(?:domains|preDeployCommand|scaling):/m);for(const key of ['PAYPAL_CLIENT_SECRET','OPENAI_API_KEY','AG_STUDIO_LICENSE_KEY','WEB_PUSH_VAPID_PRIVATE_KEY','STAGING_ACCESS_PASSWORD'])assert.match(yaml,new RegExp('key: '+key+'\\s+sync: false'));
 });

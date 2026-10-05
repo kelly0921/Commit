@@ -12,6 +12,9 @@ import {createGateway} from './gateway.mjs';
 const childFile=fileURLToPath(new URL('./child.mjs',import.meta.url));
 const log=(event,kind)=>console.log(JSON.stringify({event,...(kind?{runtime:kind}:{})}));
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+// Disk-backed Render services cannot customize the platform shutdown delay.
+// Leave cleanup headroom before Render's documented 30-second default.
+const shutdownMs=25000;
 export async function startLauncher(config,{control=true,onEvent=log,signal}={}){
   prepareStorage(config);
   let stopping=false,resetting=false,ready=false,controlSocket,ownsControl=false,stopPromise,healthPromise;
@@ -60,7 +63,7 @@ export async function startLauncher(config,{control=true,onEvent=log,signal}={})
   async function stop(code=0){
     if(stopPromise)return stopPromise;stopping=true;ready=false;
     stopPromise=(async()=>{
-      const deadline=setTimeout(()=>{for(const child of children.values())child.kill('SIGKILL');gateway.closeAllConnections();},config.shutdownMs??45000);
+      const deadline=setTimeout(()=>{for(const child of children.values())child.kill('SIGKILL');gateway.closeAllConnections();},config.shutdownMs??shutdownMs);
       const gatewayClosed=new Promise(resolve=>{if(gateway.listening){gateway.close(resolve);gateway.closeIdleConnections();}else resolve();});
       if(controlSocket?.listening)controlSocket.close();
       await stopChildren();await gatewayClosed;clearTimeout(deadline);
@@ -70,7 +73,7 @@ export async function startLauncher(config,{control=true,onEvent=log,signal}={})
   }
   async function reset(){
     assert.ok(!stopping&&!resetting,'Runtime busy');resetting=true;ready=false;
-    const deadline=setTimeout(()=>{for(const child of children.values())child.kill('SIGKILL');},config.shutdownMs??45000);
+    const deadline=setTimeout(()=>{for(const child of children.values())child.kill('SIGKILL');},config.shutdownMs??shutdownMs);
     try{
       await stopChildren();clearTimeout(deadline);
       assert.ok(!stopping,'Launcher stopping');

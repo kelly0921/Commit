@@ -10,7 +10,6 @@ services:
     buildCommand: npm ci --include=dev && node deploy/render/build.mjs
     startCommand: node deploy/render/launcher.mjs
     healthCheckPath: /health
-    maxShutdownDelaySeconds: 60
     disk:
       name: commit-staging-data
       mountPath: /var/data/commit
