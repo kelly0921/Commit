@@ -1,20 +1,16 @@
 // Deployment composition only. All HTTP, authority and payment classes are frozen.
-import {ProductDatabase} from '../../dist/src/product/db.js';
-import {createProductServer} from '../../dist/src/product/server.js';
-import {createMerchantServer} from '../../dist/src/merchant/server.js';
-import {ProductService} from '../../dist/src/product/service.js';
-import {OpenAiProvider,OfflineDemoProvider} from '../../dist/src/product/ai.js';
-import {PayPalAdapter} from '../../dist/src/paypal.js';
-import {CommitmentService} from '../../dist/src/product/commitments.js';
-import {CaptureSagaService} from '../../dist/src/product/capture-saga.js';
-import {RenderCommunicationService} from './communication.mjs';
 import {CONSUMER_COOKIE,MERCHANT_COOKIE} from './config.mjs';
-import {AgentCoordinator} from '../../dist/src/product/agents.js';
-import {MerchantOfferService} from '../../dist/src/merchant/offers.js';
+import {requireStartup,startupFailureRecord} from './diagnostics.mjs';
 
 const kind=process.argv[2];
+let stage=['consumer','merchant'].includes(kind)?kind:'launcher',fallback='runtime_initialization_failed';
 let database,server,coordinator,stopWorker,closing=false;
 const send=value=>{if(process.connected)process.send(value);};
+function failStartup(error){
+  const record=startupFailureRecord(error,stage,fallback),payload={type:'failed',stage:record.stage,reason:record.reason};
+  // Flush only these labels before exiting; raw stdout/stderr stay suppressed.
+  if(process.connected)process.send(payload,()=>process.exit(1));else process.exit(1);
+}
 async function shutdown(){
   if(closing)return;closing=true;stopWorker?.();
   // Stop new HTTP work, let accepted requests and the existing worker drain finish.
@@ -33,12 +29,21 @@ process.on('message',message=>{
 for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void shutdown().catch(()=>process.exit(1)));
 process.on('disconnect',()=>void shutdown().catch(()=>process.exit(1)));
 try{
-  if(!['consumer','merchant'].includes(kind))throw Error('Invalid child kind');
-  if(process.env.PAYPAL_ENVIRONMENT!=='sandbox')throw Error('Sandbox only');
+  requireStartup(['consumer','merchant'].includes(kind),'launcher','runtime_start_failed');
+  requireStartup(process.env.PAYPAL_ENVIRONMENT==='sandbox',kind,'non_sandbox_payment_environment');
+  stage=kind+'_dependencies';fallback='dependency_load_failed';
+  // Same frozen dependencies, loaded inside the safe IPC failure boundary.
+  const [{ProductDatabase},{createProductServer},{createMerchantServer},{ProductService},{OpenAiProvider,OfflineDemoProvider},{PayPalAdapter},{CommitmentService},{CaptureSagaService},{RenderCommunicationService},{AgentCoordinator},{MerchantOfferService}]=await Promise.all([
+    import('../../dist/src/product/db.js'),import('../../dist/src/product/server.js'),import('../../dist/src/merchant/server.js'),import('../../dist/src/product/service.js'),import('../../dist/src/product/ai.js'),import('../../dist/src/paypal.js'),import('../../dist/src/product/commitments.js'),import('../../dist/src/product/capture-saga.js'),import('./communication.mjs'),import('../../dist/src/product/agents.js'),import('../../dist/src/merchant/offers.js')
+  ]);
+  // A shutdown received while dependencies load must not start services afterward.
+  if(closing)process.exit(0);
+  stage=kind+'_database';fallback='database_initialization_failed';
   database=new ProductDatabase(process.env.PRODUCT_DATABASE_PATH);
+  stage=kind+'_services';fallback='runtime_initialization_failed';
   if(kind==='consumer'){
     const mode=process.env.AI_MODE;
-    if(!['openai','offline-demo'].includes(mode))throw Error('Invalid AI mode');
+    requireStartup(['openai','offline-demo'].includes(mode),stage,'invalid_ai_mode');
     const ai=mode==='offline-demo'?new OfflineDemoProvider():new OpenAiProvider(process.env.OPENAI_API_KEY??'',process.env.OPENAI_MODEL??'gpt-5.6-terra');
     const gateway=process.env.PAYPAL_CLIENT_ID&&process.env.PAYPAL_CLIENT_SECRET?new PayPalAdapter(process.env.PAYPAL_CLIENT_ID,process.env.PAYPAL_CLIENT_SECRET):undefined;
     const commitments=new CommitmentService(database,gateway,process.env.PUBLIC_CONSUMER_ORIGIN,process.env.PAYPAL_MERCHANT_ID);
@@ -48,6 +53,7 @@ try{
     coordinator=new AgentCoordinator(database,service,communication);stopWorker=coordinator.start();
     server=createProductServer(service,undefined,{coordinator,cookieName:CONSUMER_COOKIE,origin:process.env.PUBLIC_CONSUMER_ORIGIN,allowHistoricalReplay:false});
   }else server=createMerchantServer({cookieName:MERCHANT_COOKIE,origin:process.env.PUBLIC_MERCHANT_ORIGIN,key:process.env.OPENAI_API_KEY,model:process.env.OPENAI_MODEL,licenseKey:process.env.AG_STUDIO_LICENSE_KEY,offers:new MerchantOfferService(database)});
-  server.once('error',()=>{send({type:'failed'});process.exit(1);});
+  stage=kind+'_listen';fallback='runtime_listen_failed';
+  server.once('error',failStartup);
   server.listen(Number(kind==='consumer'?process.env.PRODUCT_PORT:process.env.MERCHANT_PORT),'127.0.0.1',()=>send({type:'ready'}));
-}catch{send({type:'failed'});database?.close();process.exitCode=1;process.disconnect?.();}
+}catch(error){try{database?.close();}catch{}failStartup(error);}

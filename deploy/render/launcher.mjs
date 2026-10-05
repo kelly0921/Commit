@@ -6,8 +6,8 @@ import {fileURLToPath} from 'node:url';
 import {resolve,join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {renderConfig,prepareStorage} from './config.mjs';
-import {initializeDatabase,resetDatabase} from './storage.mjs';
 import {createGateway} from './gateway.mjs';
+import {StartupFailure,startupFailure,startupFailureRecord,childStartupFailure,startupStep,startupStepAsync} from './diagnostics.mjs';
 
 const childFile=fileURLToPath(new URL('./child.mjs',import.meta.url));
 const log=(event,kind)=>console.log(JSON.stringify({event,...(kind?{runtime:kind}:{})}));
@@ -16,7 +16,9 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 // Leave cleanup headroom before Render's documented 30-second default.
 const shutdownMs=25000;
 export async function startLauncher(config,{control=true,onEvent=log,signal}={}){
-  prepareStorage(config);
+  startupStep('storage',()=>prepareStorage(config),'storage_prepare_failed');
+  // Catch compiled/native dependency failures before any listener/child opens.
+  const {initializeDatabase,resetDatabase}=await startupStepAsync('database',()=>import('./storage.mjs'),'dependency_load_failed');
   let stopping=false,resetting=false,ready=false,controlSocket,ownsControl=false,stopPromise,healthPromise;
   const children=new Map(),runtimeId=randomUUID(),probes=new Map();
   const socketPath=join(config.root,'runtime','control.sock'),metadataPath=join(config.root,'runtime','launcher.json');
@@ -33,7 +35,7 @@ export async function startLauncher(config,{control=true,onEvent=log,signal}={})
     if(!healthPromise)healthPromise=Promise.all([...children.values()].map(probe)).then(results=>available()&&results.every(Boolean)).finally(()=>{healthPromise=undefined;});
     return healthPromise;
   };
-  const gateway=createGateway(config,{health,available});
+  const gateway=startupStep('gateway',()=>createGateway(config,{health,available}),'gateway_initialization_failed');
   const waitExit=child=>child.exitCode!==null||child.signalCode!==null||!child.pid?Promise.resolve():new Promise(resolve=>child.once('close',resolve));
   async function stopChildren(){
     const current=[...children.values()];
@@ -45,16 +47,16 @@ export async function startLauncher(config,{control=true,onEvent=log,signal}={})
     return new Promise((resolveReady,rejectReady)=>{
       const environment={PATH:process.env.PATH,SystemRoot:process.env.SystemRoot,NODE_ENV:'production',AI_MODE:config.aiMode,PAYPAL_ENVIRONMENT:'sandbox',COMMIT_STAGING:'true',PRODUCT_DATABASE_PATH:config.database,PUBLIC_CONSUMER_ORIGIN:config.consumerOrigin,PUBLIC_MERCHANT_ORIGIN:config.merchantOrigin,PRODUCT_PORT:String(config.consumerPort),MERCHANT_PORT:String(config.merchantPort),TMPDIR:join(config.root,'tmp'),TMP:join(config.root,'tmp'),TEMP:join(config.root,'tmp'),...config.childEnv};
       const child=fork(childFile,[kind],{env:environment,execArgv:[],stdio:['ignore','ignore','ignore','ipc']});children.set(kind,child);
-      const timer=setTimeout(()=>rejectReady(Error('Runtime startup timeout')),60000);
+      const timer=setTimeout(()=>rejectReady(new StartupFailure(kind,'startup_timeout')),60000);
       child.on('message',message=>{
         if(message?.type==='ready'){clearTimeout(timer);onEvent('child_ready',kind);resolveReady();}
         else if(message?.type==='health'&&probes.get(message.id)?.child===child)probes.get(message.id).done(message.ok===true);
-        else if(message?.type==='failed')rejectReady(Error('Runtime startup failed'));
+        else if(message?.type==='failed'){clearTimeout(timer);rejectReady(childStartupFailure(kind,message));}
       });
-      child.once('error',()=>{clearTimeout(timer);rejectReady(Error('Runtime spawn failed'));if(!stopping&&!resetting)void stop(1);});
+      child.once('error',error=>{clearTimeout(timer);rejectReady(startupFailure(error,kind,'spawn_failed'));if(!stopping&&!resetting)void stop(1);});
       child.once('exit',()=>{
         clearTimeout(timer);for(const pending of probes.values())if(pending.child===child)pending.done(false);
-        rejectReady(Error('Runtime exited'));
+        rejectReady(new StartupFailure(kind,'child_exited'));
         if(!stopping&&!resetting){ready=false;onEvent('child_exit',kind);void stop(1);}
       });
     });
@@ -87,6 +89,7 @@ export async function startLauncher(config,{control=true,onEvent=log,signal}={})
     }finally{resetting=false;}
   }
   signal?.addEventListener('abort',()=>void stop(0),{once:true});
+  let stage='control';
   try{
     assert.ok(!signal?.aborted,'Startup cancelled');
     if(control){
@@ -113,19 +116,28 @@ export async function startLauncher(config,{control=true,onEvent=log,signal}={})
       writeFileSync(metadataPath,JSON.stringify({runtimeId})+'\n',{mode:0o600});chmodSync(metadataPath,0o600);
     }
     assert.ok(!stopping,'Startup cancelled');
+    stage='database';
     const initialization=initializeDatabase(config);onEvent(initialization.fresh?'fresh_staging_initialized':'staging_reopened');
+    stage='gateway';
     await new Promise((resolve,reject)=>{gateway.once('error',reject);gateway.listen(config.port,config.bind,resolve);});
+    stage='consumer';
     await startChildren();onEvent('ready');
     return {gateway,closed,stop,reset,health,children:()=>new Map(children),initialization};
-  }catch(error){await stop(1);throw error;}
+  }catch(error){
+    const fallback=stage==='control'?'control_setup_failed':stage==='database'?'database_initialization_failed':stage==='gateway'?'gateway_initialization_failed':'runtime_start_failed';
+    const failure=startupFailure(error,stage,fallback);
+    await stop(1);throw failure;
+  }
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   process.umask(0o077);
   const shutdown=new AbortController();
   for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>shutdown.abort());
+  let stage='config';
   try{
-    const runtime=await startLauncher(renderConfig(process.env),{signal:shutdown.signal});
+    const config=renderConfig(process.env);stage='launcher';
+    const runtime=await startLauncher(config,{signal:shutdown.signal});
     process.exitCode=await runtime.closed;
-  }catch{if(!shutdown.signal.aborted){log('render_start_failed');process.exitCode=1;}}
+  }catch(error){if(!shutdown.signal.aborted){console.log(JSON.stringify(startupFailureRecord(error,stage)));process.exitCode=1;}}
 }

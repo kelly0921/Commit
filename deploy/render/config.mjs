@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createECDH} from 'node:crypto';
 import {existsSync,lstatSync,realpathSync,readFileSync,chmodSync,mkdirSync} from 'node:fs';
 import {resolve,join} from 'node:path';
+import {requireStartup,startupStep} from './diagnostics.mjs';
 
 export const DISK='/var/data/commit';
 export const DATABASE=DISK+'/staging.sqlite';
@@ -29,26 +30,26 @@ export function validateVapid(publicKey,privateKey){
 }
 
 export function renderConfig(env){
-  assert.equal(env.RENDER,'true','Render runtime required');
-  assert.equal(env.NODE_ENV,'production');assert.equal(env.COMMIT_STAGING,'true');
-  assert.equal(env.PAYPAL_ENVIRONMENT,'sandbox');assert.equal(env.AI_MODE,'openai');
-  assert.ok(!env.ENABLE_SANDBOX_SAGA_NEGATIVE_TEST||env.ENABLE_SANDBOX_SAGA_NEGATIVE_TEST==='false');
-  assert.equal(env.DATABASE_PATH,DATABASE,'Only fresh Render disk database allowed');
-  assert.ok(!env.PRODUCT_DATABASE_PATH||env.PRODUCT_DATABASE_PATH===DATABASE);
+  requireStartup(env.RENDER==='true','config','invalid_render_environment');
+  requireStartup(env.NODE_ENV==='production','config','invalid_node_environment');requireStartup(env.COMMIT_STAGING==='true','config','invalid_staging_mode');
+  requireStartup(env.PAYPAL_ENVIRONMENT==='sandbox','config','non_sandbox_payment_environment');requireStartup(env.AI_MODE==='openai','config','invalid_ai_mode');
+  requireStartup(!env.ENABLE_SANDBOX_SAGA_NEGATIVE_TEST||env.ENABLE_SANDBOX_SAGA_NEGATIVE_TEST==='false','config','unsafe_negative_test_flag');
+  requireStartup(env.DATABASE_PATH===DATABASE,'config','invalid_database_path');
+  requireStartup(!env.PRODUCT_DATABASE_PATH||env.PRODUCT_DATABASE_PATH===DATABASE,'config','invalid_database_path');
   const platformHost=env.RENDER_EXTERNAL_HOSTNAME;
-  assert.ok(typeof platformHost==='string'&&/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.onrender\.com$/.test(platformHost),'Render-provided hostname required');
-  const origin=publicOrigin('https://'+platformHost).origin;
-  const port=Number(env.PORT);assert.ok(Number.isInteger(port)&&port>0&&port<65536&&![3010,3011].includes(port));
-  for(const key of ['PAYPAL_CLIENT_ID','PAYPAL_CLIENT_SECRET','OPENAI_API_KEY','AG_STUDIO_LICENSE_KEY'])assert.ok(env[key]?.trim(),key+' required');
-  for(const key of ['WEB_PUSH_ENABLED','STAGING_ACCESS_ENABLED'])assert.ok(env[key]===undefined||['true','false'].includes(env[key]),key+' must be true or false');
+  requireStartup(typeof platformHost==='string'&&/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.onrender\.com$/.test(platformHost),'config','invalid_render_hostname');
+  const origin=startupStep('config',()=>publicOrigin('https://'+platformHost).origin,'invalid_public_origin');
+  const port=Number(env.PORT);requireStartup(Number.isInteger(port)&&port>0&&port<65536&&![3010,3011].includes(port),'config','invalid_port');
+  for(const key of ['PAYPAL_CLIENT_ID','PAYPAL_CLIENT_SECRET','OPENAI_API_KEY','AG_STUDIO_LICENSE_KEY'])requireStartup(env[key]?.trim(),'config','missing_required_env');
+  for(const key of ['WEB_PUSH_ENABLED','STAGING_ACCESS_ENABLED'])requireStartup(env[key]===undefined||['true','false'].includes(env[key]),'config','invalid_capability_flag');
   const pushEnabled=env.WEB_PUSH_ENABLED==='true',accessEnabled=env.STAGING_ACCESS_ENABLED==='true';
   if(pushEnabled){
-    assert.ok(/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.WEB_PUSH_CONTACT??''));
-    validateVapid(env.WEB_PUSH_VAPID_PUBLIC_KEY,env.WEB_PUSH_VAPID_PRIVATE_KEY);
+    requireStartup(/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.WEB_PUSH_CONTACT??''),'config','invalid_push_contact');
+    startupStep('config',()=>validateVapid(env.WEB_PUSH_VAPID_PUBLIC_KEY,env.WEB_PUSH_VAPID_PRIVATE_KEY),'invalid_vapid_config');
   }
   if(accessEnabled){
-    assert.ok(/^[a-zA-Z0-9._-]{1,64}$/.test(env.STAGING_ACCESS_USERNAME??''),'Staging access user required');
-    assert.ok((env.STAGING_ACCESS_PASSWORD??'').length>=20,'Staging access secret must have at least 20 characters');
+    requireStartup(/^[a-zA-Z0-9._-]{1,64}$/.test(env.STAGING_ACCESS_USERNAME??''),'config','invalid_access_user');
+    requireStartup((env.STAGING_ACCESS_PASSWORD??'').length>=20,'config','invalid_access_password');
   }
   const keys=['OPENAI_API_KEY','OPENAI_MODEL','PAYPAL_CLIENT_ID','PAYPAL_CLIENT_SECRET','PAYPAL_MERCHANT_ID','AG_STUDIO_LICENSE_KEY',...(pushEnabled?['WEB_PUSH_VAPID_PUBLIC_KEY','WEB_PUSH_VAPID_PRIVATE_KEY','WEB_PUSH_CONTACT']:[])];
   const childEnv=Object.fromEntries(keys.filter(k=>env[k]).map(k=>[k,env[k]]));
@@ -57,9 +58,9 @@ export function renderConfig(env){
 }
 
 export function exactDisk(path,fs={realpathSync,lstatSync}){
-  assert.equal(path,DISK,'Fixed Render disk only');
-  assert.equal(fs.realpathSync(path),DISK,'Alternate/symlinked disk forbidden');
-  const stat=fs.lstatSync(path);assert.ok(stat.isDirectory()&&!stat.isSymbolicLink());
+  requireStartup(path===DISK,'storage','unsafe_storage_path');
+  requireStartup(fs.realpathSync(path)===DISK,'storage','unsafe_storage_path');
+  const stat=fs.lstatSync(path);requireStartup(stat.isDirectory()&&!stat.isSymbolicLink(),'storage','invalid_storage_resource');
 }
 
 export function guardStorage(config){
@@ -68,9 +69,9 @@ export function guardStorage(config){
     assert.ok(resolve(config.root).replaceAll('\\','/').startsWith(prefix.replaceAll('\\','/')),'Local verification fixture only');
     assert.equal(realpathSync(config.root),resolve(config.root));assert.ok(!lstatSync(config.root).isSymbolicLink());
   }else{
-    assert.equal(process.platform,'linux');exactDisk(config.root);
+    requireStartup(process.platform==='linux','storage','unsupported_platform');exactDisk(config.root);
     const mounts=readFileSync('/proc/self/mountinfo','utf8').split('\n').map(line=>line.split(' ')[4]?.replace(/\\040/g,' '));
-    assert.ok(mounts.includes(DISK),'Persistent disk must be mounted before runtime startup');
+    requireStartup(mounts.includes(DISK),'storage','disk_mount_not_detected');
   }
   assert.equal(config.database,join(config.root,'staging.sqlite'));
   for(const name of DATABASE_FILES){const path=join(config.root,name);if(existsSync(path))assert.ok(lstatSync(path).isFile()&&!lstatSync(path).isSymbolicLink(),'Unexpected database resource');}
