@@ -1,0 +1,12 @@
+import { mkdir, copyFile } from 'node:fs/promises';
+await mkdir('dist/src/product',{recursive:true});
+await copyFile('src/product/schema.sql','dist/src/product/schema.sql');
+await copyFile('src/product/migration-2.sql','dist/src/product/migration-2.sql');
+await copyFile('src/product/migration-3.sql','dist/src/product/migration-3.sql');
+await copyFile('src/product/migration-4.sql','dist/src/product/migration-4.sql');
+await copyFile('src/product/migration-5.sql','dist/src/product/migration-5.sql');
+await copyFile('src/product/migration-6.sql','dist/src/product/migration-6.sql');
+await mkdir('dist/product-public',{recursive:true});
+for(const file of ['index.html','app.js','app-views.js','views.js','offers.js','styles.css','agent-ui.js','pwa.js','sw.js','manifest.webmanifest','offline.html','replay.json']) await copyFile(`product-public/${file}`,`dist/product-public/${file}`);
+await mkdir('dist/product-public/icons',{recursive:true});
+for(const file of ['commit-192.png','commit-512.png','commit-maskable-512.png'])await copyFile(`product-public/icons/${file}`,`dist/product-public/icons/${file}`);

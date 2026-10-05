@@ -1,0 +1,15 @@
+# Prepared template only. Set real DNS hosts and a Caddy-generated password hash.
+# Access protection covers both demo origins; never commit credentials here.
+{$COMMIT_CONSUMER_HOST} {
+    basic_auth {
+        {$COMMIT_DEMO_USER} {$COMMIT_DEMO_PASSWORD_HASH}
+    }
+    reverse_proxy 127.0.0.1:3010
+}
+
+{$COMMIT_MERCHANT_HOST} {
+    basic_auth {
+        {$COMMIT_DEMO_USER} {$COMMIT_DEMO_PASSWORD_HASH}
+    }
+    reverse_proxy 127.0.0.1:3011
+}

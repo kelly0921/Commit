@@ -1,0 +1,16 @@
+{
+  "name": "Commit",
+  "short_name": "Commit",
+  "id": "/commit-app",
+  "start_url": "/group",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#0A4978",
+  "background_color": "#f7f8fa",
+  "description": "Private boundaries. Your own share. Group coordination when you need it.",
+  "icons": [
+    { "src": "/icons/commit-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/commit-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/commit-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

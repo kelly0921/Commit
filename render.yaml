@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+# Domains and secret values are deliberately supplied by the operator.
+services:
+  - type: web
+    name: commit-staging
+    runtime: node
+    plan: 1c-2g
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    buildCommand: npm ci --include=dev && node deploy/render/build.mjs
+    startCommand: node deploy/render/launcher.mjs
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 60
+    disk:
+      name: commit-staging-data
+      mountPath: /var/data/commit
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: '24.17.0'
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /var/data/commit/staging.sqlite
+      - key: COMMIT_STAGING
+        value: 'true'
+      - key: AI_MODE
+        value: openai
+      - key: OPENAI_MODEL
+        value: gpt-5.6-terra
+      - key: PAYPAL_ENVIRONMENT
+        value: sandbox
+      - key: ENABLE_SANDBOX_SAGA_NEGATIVE_TEST
+        value: 'false'
+      - key: PUBLIC_CONSUMER_ORIGIN
+        sync: false
+      - key: PUBLIC_MERCHANT_ORIGIN
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_MERCHANT_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AG_STUDIO_LICENSE_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_PUBLIC_KEY
+        sync: false
+      - key: WEB_PUSH_VAPID_PRIVATE_KEY
+        sync: false
+      - key: WEB_PUSH_CONTACT
+        sync: false
+      - key: STAGING_ACCESS_USERNAME
+        sync: false
+      - key: STAGING_ACCESS_PASSWORD
+        sync: false

@@ -1,0 +1,44 @@
+{
+  "name": "commit-paypal-spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "build": "tsc && node scripts/build-product.mjs && node scripts/build-merchant.mjs",
+    "dev:merchant": "node --env-file-if-exists=.env --import tsx src/merchant/server.ts",
+    "start:merchant": "node --env-file-if-exists=.env dist/src/merchant/server.js",
+    "dev:product": "node --env-file-if-exists=.env --import tsx src/product/server.ts",
+    "start:product": "node --env-file-if-exists=.env dist/src/product/server.js",
+    "verify:ai": "node --env-file-if-exists=.env --import tsx scripts/verify-live-ai.mjs",
+    "verify:bounds": "node --env-file-if-exists=.env --import tsx scripts/verify-bounded-agency.mjs",
+    "verify:commitments": "node --env-file-if-exists=.env --import tsx scripts/verify-phase-2.mjs",
+    "verify:reconcile": "node --env-file-if-exists=.env --import tsx scripts/verify-phase-2-1.mjs",
+    "evidence": "node scripts/collect-evidence.mjs",
+    "start": "node --env-file-if-exists=.env dist/src/server.js",
+    "verify:saga": "node --env-file-if-exists=.env --import tsx scripts/verify-phase-3.mjs"
+  },
+  "dependencies": {
+    "@paypal/paypal-server-sdk": "2.5.0",
+    "ag-studio": "3.0.0",
+    "ag-studio-react": "3.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/web-push": "^3.6.4",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

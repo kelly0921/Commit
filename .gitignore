@@ -1,0 +1,15 @@
+node_modules/
+dist/
+data/
+.env*
+!.env.example
+.cache/
+*.log
+merchant-public/merchant.js
+merchant-public/merchant.js.LEGAL.txt
+.staging/
+# Local historical evidence is retained outside the published source snapshot.
+product-public/replay.json
+docs/assets/
+docs/ui-review-bundle/
+docs/*evidence*.json
