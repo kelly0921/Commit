@@ -7,7 +7,8 @@ import {OpenAiProvider,OfflineDemoProvider} from '../../dist/src/product/ai.js';
 import {PayPalAdapter} from '../../dist/src/paypal.js';
 import {CommitmentService} from '../../dist/src/product/commitments.js';
 import {CaptureSagaService} from '../../dist/src/product/capture-saga.js';
-import {CommunicationService} from '../../dist/src/product/communication.js';
+import {RenderCommunicationService} from './communication.mjs';
+import {CONSUMER_COOKIE,MERCHANT_COOKIE} from './config.mjs';
 import {AgentCoordinator} from '../../dist/src/product/agents.js';
 import {MerchantOfferService} from '../../dist/src/merchant/offers.js';
 
@@ -43,10 +44,10 @@ try{
     const commitments=new CommitmentService(database,gateway,process.env.PUBLIC_CONSUMER_ORIGIN,process.env.PAYPAL_MERCHANT_ID);
     const sagas=new CaptureSagaService(database,commitments,gateway,false);
     const service=new ProductService(database,ai,mode,commitments,sagas);
-    const communication=new CommunicationService(database,{publicKey:process.env.WEB_PUSH_VAPID_PUBLIC_KEY,privateKey:process.env.WEB_PUSH_VAPID_PRIVATE_KEY,contact:process.env.WEB_PUSH_CONTACT});
+    const communication=new RenderCommunicationService(database,{publicKey:process.env.WEB_PUSH_VAPID_PUBLIC_KEY,privateKey:process.env.WEB_PUSH_VAPID_PRIVATE_KEY,contact:process.env.WEB_PUSH_CONTACT},process.env.WEB_PUSH_ENABLED==='true');
     coordinator=new AgentCoordinator(database,service,communication);stopWorker=coordinator.start();
-    server=createProductServer(service,undefined,{coordinator,cookieName:'commit_demo_phase6',origin:process.env.PUBLIC_CONSUMER_ORIGIN,allowHistoricalReplay:false});
-  }else server=createMerchantServer({cookieName:'commit_merchant_phase6',origin:process.env.PUBLIC_MERCHANT_ORIGIN,key:process.env.OPENAI_API_KEY,model:process.env.OPENAI_MODEL,licenseKey:process.env.AG_STUDIO_LICENSE_KEY,offers:new MerchantOfferService(database)});
+    server=createProductServer(service,undefined,{coordinator,cookieName:CONSUMER_COOKIE,origin:process.env.PUBLIC_CONSUMER_ORIGIN,allowHistoricalReplay:false});
+  }else server=createMerchantServer({cookieName:MERCHANT_COOKIE,origin:process.env.PUBLIC_MERCHANT_ORIGIN,key:process.env.OPENAI_API_KEY,model:process.env.OPENAI_MODEL,licenseKey:process.env.AG_STUDIO_LICENSE_KEY,offers:new MerchantOfferService(database)});
   server.once('error',()=>{send({type:'failed'});process.exit(1);});
   server.listen(Number(kind==='consumer'?process.env.PRODUCT_PORT:process.env.MERCHANT_PORT),'127.0.0.1',()=>send({type:'ready'}));
 }catch{send({type:'failed'});database?.close();process.exitCode=1;process.disconnect?.();}

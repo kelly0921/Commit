@@ -6,6 +6,8 @@ import {resolve,join} from 'node:path';
 export const DISK='/var/data/commit';
 export const DATABASE=DISK+'/staging.sqlite';
 export const DATABASE_FILES=['staging.sqlite','staging.sqlite-wal','staging.sqlite-shm'];
+export const CONSUMER_COOKIE='commit_demo_phase6';
+export const MERCHANT_COOKIE='commit_merchant_phase6';
 
 export function publicOrigin(value){
   const u=new URL(value);
@@ -33,19 +35,25 @@ export function renderConfig(env){
   assert.ok(!env.ENABLE_SANDBOX_SAGA_NEGATIVE_TEST||env.ENABLE_SANDBOX_SAGA_NEGATIVE_TEST==='false');
   assert.equal(env.DATABASE_PATH,DATABASE,'Only fresh Render disk database allowed');
   assert.ok(!env.PRODUCT_DATABASE_PATH||env.PRODUCT_DATABASE_PATH===DATABASE);
-  const consumer=publicOrigin(env.PUBLIC_CONSUMER_ORIGIN),merchant=publicOrigin(env.PUBLIC_MERCHANT_ORIGIN);
-  assert.notEqual(consumer.host,merchant.host,'Two exact public hosts required');
+  const platformHost=env.RENDER_EXTERNAL_HOSTNAME;
+  assert.ok(typeof platformHost==='string'&&/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.onrender\.com$/.test(platformHost),'Render-provided hostname required');
+  const origin=publicOrigin('https://'+platformHost).origin;
   const port=Number(env.PORT);assert.ok(Number.isInteger(port)&&port>0&&port<65536&&![3010,3011].includes(port));
   for(const key of ['PAYPAL_CLIENT_ID','PAYPAL_CLIENT_SECRET','OPENAI_API_KEY','AG_STUDIO_LICENSE_KEY'])assert.ok(env[key]?.trim(),key+' required');
-  assert.ok(/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.WEB_PUSH_CONTACT??''));
-  validateVapid(env.WEB_PUSH_VAPID_PUBLIC_KEY,env.WEB_PUSH_VAPID_PRIVATE_KEY);
-  assert.ok(/^[a-zA-Z0-9._-]{1,64}$/.test(env.STAGING_ACCESS_USERNAME??''),'Staging access user required');
-  assert.ok((env.STAGING_ACCESS_PASSWORD??'').length>=20,'Staging access secret must have at least 20 characters');
-  const platformHost=env.RENDER_EXTERNAL_HOSTNAME;
-  if(platformHost)assert.ok(/^[a-z0-9-]+\.onrender\.com$/.test(platformHost));
-  const keys=['OPENAI_API_KEY','OPENAI_MODEL','PAYPAL_CLIENT_ID','PAYPAL_CLIENT_SECRET','PAYPAL_MERCHANT_ID','WEB_PUSH_VAPID_PUBLIC_KEY','WEB_PUSH_VAPID_PRIVATE_KEY','WEB_PUSH_CONTACT','AG_STUDIO_LICENSE_KEY'];
+  for(const key of ['WEB_PUSH_ENABLED','STAGING_ACCESS_ENABLED'])assert.ok(env[key]===undefined||['true','false'].includes(env[key]),key+' must be true or false');
+  const pushEnabled=env.WEB_PUSH_ENABLED==='true',accessEnabled=env.STAGING_ACCESS_ENABLED==='true';
+  if(pushEnabled){
+    assert.ok(/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.WEB_PUSH_CONTACT??''));
+    validateVapid(env.WEB_PUSH_VAPID_PUBLIC_KEY,env.WEB_PUSH_VAPID_PRIVATE_KEY);
+  }
+  if(accessEnabled){
+    assert.ok(/^[a-zA-Z0-9._-]{1,64}$/.test(env.STAGING_ACCESS_USERNAME??''),'Staging access user required');
+    assert.ok((env.STAGING_ACCESS_PASSWORD??'').length>=20,'Staging access secret must have at least 20 characters');
+  }
+  const keys=['OPENAI_API_KEY','OPENAI_MODEL','PAYPAL_CLIENT_ID','PAYPAL_CLIENT_SECRET','PAYPAL_MERCHANT_ID','AG_STUDIO_LICENSE_KEY',...(pushEnabled?['WEB_PUSH_VAPID_PUBLIC_KEY','WEB_PUSH_VAPID_PRIVATE_KEY','WEB_PUSH_CONTACT']:[])];
   const childEnv=Object.fromEntries(keys.filter(k=>env[k]).map(k=>[k,env[k]]));
-  return {root:DISK,database:DATABASE,port,bind:'0.0.0.0',consumerOrigin:consumer.origin,merchantOrigin:merchant.origin,consumerPort:3010,merchantPort:3011,platformHost,accessUser:env.STAGING_ACCESS_USERNAME,accessPassword:env.STAGING_ACCESS_PASSWORD,childEnv,aiMode:'openai',localVerification:false,shutdownMs:45000};
+  childEnv.WEB_PUSH_ENABLED=String(pushEnabled);
+  return {root:DISK,database:DATABASE,port,bind:'0.0.0.0',consumerOrigin:origin,merchantOrigin:origin,consumerPort:3010,merchantPort:3011,platformHost,accessEnabled,accessUser:accessEnabled?env.STAGING_ACCESS_USERNAME:undefined,accessPassword:accessEnabled?env.STAGING_ACCESS_PASSWORD:undefined,pushEnabled,childEnv,aiMode:'openai',localVerification:false,shutdownMs:25000};
 }
 
 export function exactDisk(path,fs={realpathSync,lstatSync}){

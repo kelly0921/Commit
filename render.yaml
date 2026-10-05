@@ -31,27 +31,15 @@ services:
         value: sandbox
       - key: ENABLE_SANDBOX_SAGA_NEGATIVE_TEST
         value: 'false'
-      - key: PUBLIC_CONSUMER_ORIGIN
-        sync: false
-      - key: PUBLIC_MERCHANT_ORIGIN
-        sync: false
+      - key: STAGING_ACCESS_ENABLED
+        value: 'false'
+      - key: WEB_PUSH_ENABLED
+        value: 'false'
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
-      - key: PAYPAL_MERCHANT_ID
-        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: AG_STUDIO_LICENSE_KEY
-        sync: false
-      - key: WEB_PUSH_VAPID_PUBLIC_KEY
-        sync: false
-      - key: WEB_PUSH_VAPID_PRIVATE_KEY
-        sync: false
-      - key: WEB_PUSH_CONTACT
-        sync: false
-      - key: STAGING_ACCESS_USERNAME
-        sync: false
-      - key: STAGING_ACCESS_PASSWORD
         sync: false

@@ -55,7 +55,7 @@ The deployment wrapper leaves frozen build scripts intact. When the legacy copy 
 
 [render.yaml](render.yaml) prepares one paid Node web service, one persistent disk and a gateway supervising the consumer and merchant processes. Render supplies TLS. The existing durable coordinator continues independently of open browser tabs. Fresh staging data initializes on the persistent disk; no historical acceptance ledger is imported.
 
-Follow [Render deployment](docs/render-deployment.md) for private environment configuration, two exact HTTPS origins, VAPID setup, health, protected reset and rollback. Automatic deployment is disabled. Repository publication does not create a Render service or deploy the app.
+Follow [Render deployment](docs/render-deployment.md) for the one-host hackathon setup. The Render-provided HTTPS hostname serves consumer routes and /merchant; only the four existing app credentials/license are required. Web Push and Basic Auth default off. The guide covers optional VAPID/access setup, health, protected reset and rollback. Automatic deployment is disabled. Repository publication does not create a Render service or deploy the app.
 
 Actual external PWA installation, OS push and physical Android/iOS verification remain outstanding. Cold testing has not begun.
 
