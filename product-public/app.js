@@ -1,7 +1,7 @@
 import {escape} from './views.js';
 import {createAppViews,createInteraction} from './app-views.js';
 import {offerBanner,offerReview} from './offers.js';
-import {activityPage,focusedNotificationPath,youPage,startPage,joinPage} from './agent-ui.js';
+import {activityPage,focusedNotificationPath,youPage,startPage,joinPage,emptyGroupPage} from './agent-ui.js';
 import {registerPwa,decorateOffline,enablePush,disablePush,install,badge} from './pwa.js';
 const views=()=>createAppViews({session,draft,statementInput,error,path:reviewOpen?'/commit/review':location.pathname,planSegment});
 const landing=(...args)=>views().landing(...args);
@@ -36,7 +36,7 @@ async function render({quiet=false}={}){
    else if(path==='/replay'){const replay=await api('/api/replay');content='<div class="notice">Verified demo replay · historical Sandbox receipt, not current financial status. Read-only; no actions are available.</div>'+sagaProgress(replay,true);}
    else if(path==='/merchant')content=merchantPage(await api('/api/catalog'));
    else if(path==='/demo'&&session.demo){const g=session.hasGroup?await api('/api/group'):null;const ledger=g?.paymentsAvailable?await api('/api/commitments/me'):null;content=views().demoPage(g,ledger);}
-   else if(!session.hasGroup)content='<div class="empty"><h1 tabindex="-1">Your next good idea starts here.</h1><a class="btn" href="/start" data-nav>Start a group</a></div>';
+   else if(!session.hasGroup)content=emptyGroupPage();
    else if(path==='/activity'){const activity=await api('/api/activity');content=activityPage(activity);await badge(activity.unreadActionable);}
    else if(path==='/you'){const own=await api('/api/constraints/me'),agent=await api('/api/agent'),updates=await api('/api/updates');content=youPage(own,agent,updates,session);}
    else if(path==='/constraints')content=constraintsPage(await api('/api/constraints/me'));

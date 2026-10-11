@@ -4,7 +4,7 @@ import {createViews,escape as e,dollars as money,ruleText,statusLabel,participan
 const date=v=>v?new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',timeZone:'UTC'}).format(new Date(v)):'Dates to come';
 const time=v=>v?e(new Date(v).toLocaleString()):'Not yet checked';
 const heading=(title,sub='')=>`<div class="app-heading"><h1 tabindex="-1">${e(title)}</h1>${sub?`<p>${e(sub)}</p>`:''}</div>`;
-const avatar=m=>`<span class="avatar ${e(m.color??'blue')}" aria-hidden="true">${e(m.name?.[0]??'?')}</span>`;
+const avatar=m=>`<span class="avatar identity-marker ${e(m.color??'blue')}" aria-hidden="true">${e(m.name?.[0]??'?')}</span>`;
 const link=(href,label,kind='')=>`<a class="btn ${kind}" href="${e(href)}" data-nav>${e(label)}</a>`;
 export const detailSheet=(id,title,body)=>`<button class="app-detail-trigger" type="button" data-sheet="${e(id)}" aria-haspopup="dialog">${e(title)}<span aria-hidden="true">›</span></button><dialog id="${e(id)}" class="detail-sheet" aria-labelledby="${e(id)}-title"><div class="sheet-handle" aria-hidden="true"></div><header class="sheet-heading"><h2 id="${e(id)}-title">${e(title)}</h2><button type="button" class="sheet-close" data-sheet-close aria-label="Close ${e(title)}" autofocus>×</button></header><div class="sheet-content">${body}</div></dialog>`;
 const disclosure=(title,body)=>detailSheet('detail-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-'),title,body);
