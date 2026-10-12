@@ -60,7 +60,7 @@ test('fresh consent presents exact old/new amounts and preserves old commercial 
 });
 test('payment review separates hold from charge, preserves exact terms, and moves provider checks away',()=>{
  const html=view('/commit').commitPage(f.group,f.ledger);
- assert.match(html,/Held, not charged/);assert.match(html,/Maximum commitment \$390/);
+ assert.match(html,/No payment approved yet/);assert.doesNotMatch(html,/<strong>Held, not charged/);assert.match(html,/Maximum commitment \$390/);
  assert.match(html,/100% refund by Dec 4/);assert.match(html,/View full terms/);
  assert.match(html,/data-action="commit-create"/);
  assert.doesNotMatch(html,/data-action="refresh-payments"|data-action="commit-verify"|data-action="confirm-finalize"/);
@@ -74,7 +74,7 @@ test('waiting shows social progress first and preserves readiness and organizer 
  assert.doesNotMatch(view('/waiting').waitingPage({...f.ready,autoFinalize:true}),/data-action="review-finalize"/);
 });
 test('confirmation remains fictional and recovery never presents pending refunds as completed',()=>{
- const html=view('/waiting').waitingPage(f.completed);assert.match(html,/You’re going to Vermont/);
+ const html=view('/waiting').waitingPage(f.completed);assert.match(html,/Group payment confirmed/);
  assert.match(html,/Everyone confirmed/);assert.match(html,/No accommodation reservation/);
  assert.ok(html.indexOf('View Group')<html.indexOf('Receipt / purchase details'));
  const recovery=view('/waiting').waitingPage(f.recovering);assert.match(recovery,/Refund pending/);

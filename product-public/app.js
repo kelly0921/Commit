@@ -156,4 +156,4 @@ root.addEventListener('keydown',event=>{
  if(event.shiftKey&&document.activeElement===controls[0]){event.preventDefault();controls.at(-1).focus();}
  else if(!event.shiftKey&&document.activeElement===controls.at(-1)){event.preventDefault();controls[0].focus();}
 });
-root.addEventListener('change',event=>{if(event.target.closest('#mandate-form')&&event.target.name!=='confirm'){const review=root.querySelector('.permission-review');review.open=true;review.querySelector('[name="confirm"]').checked=false;}});
+root.addEventListener('change',event=>{if(event.target.closest('#mandate-form')&&event.target.name!=='confirm'){const review=root.querySelector('.permission-review');review.open=true;review.querySelector('[name="confirm"]').checked=false;const feedback=event.target.form.querySelector('[data-permission-feedback]');if(feedback)feedback.textContent=event.target.form.dataset.unsaved==='true'?'Unsaved changes — review and save to apply.':'Changes take effect only after you review and save.';}});
