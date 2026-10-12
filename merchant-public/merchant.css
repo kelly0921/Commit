@@ -90,3 +90,17 @@ h1{font-size:30px;font-weight:730;letter-spacing:-.035em}
 .studio-shell{box-shadow:0 6px 22px rgb(42 33 28 / .05)}
 
 .offers-intro .eyebrow{color:#91421e}
+
+/* Scenario impact: the same anonymous cohort, from blocked intent to potential checkout. */
+.impact-result .result-numbers{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}
+.impact-result .result-numbers>div{min-width:0}
+.impact-result .result-numbers b{font-size:24px}
+.impact-result .result-numbers span{line-height:1.45}
+.impact-definition{font-size:12px;line-height:1.6;color:var(--text)}
+.result-numbers .paypal-impact-volume{border-left:2px solid var(--primary);padding-left:10px}
+.result-numbers .paypal-impact-volume b{color:var(--primary)}
+.impact-path{list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 20px;margin:18px 0;padding:0}
+.impact-path li{position:relative;display:flex;align-items:flex-start;gap:8px;font-size:11px;line-height:1.5;color:var(--text)}
+.impact-path li>span{display:grid;place-items:center;flex:0 0 22px;height:22px;border:1px solid var(--path);border-radius:50%;color:var(--primary);background:var(--brand-soft);font-size:10px;font-weight:700}
+.impact-path li:not(:nth-child(3n)):not(:last-child)::after{content:'→';position:absolute;right:-15px;top:2px;color:var(--primary)}
+@media(max-width:600px){.impact-path{grid-template-columns:1fr;gap:10px}.impact-path li:not(:nth-child(3n)):not(:last-child)::after{content:none}.impact-path li:not(:last-child)::before{content:'';position:absolute;left:11px;top:24px;height:8px;border-left:1px solid var(--path)}}

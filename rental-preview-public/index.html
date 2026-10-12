@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Commit · Whole-home discovery preview</title><link rel="stylesheet" href="/styles.css"><script type="module" src="/app.js"></script></head>
+<body><div class="app"><header><a href="/" class="brand" aria-label="Commit rental preview">Commit<span aria-hidden="true">●</span></a><span class="preview-label">Local preview</span></header><main>
+<p class="eyebrow">A place for your people</p><h1>One home.<br>Room for everyone.</h1><p class="intro">Explore what a whole stay could cost each of you, before deciding your budget.</p>
+<aside class="notice"><strong>Fictional homes · no booking</strong><p>This preview explores rentals separately from your current group plan. Prices are examples; availability and full booking terms are unverified.</p></aside>
+<form id="search"><div class="date-grid"><label>Arrive<input name="arrival" type="date" value="2027-02-12" required></label><label>Leave<input name="departure" type="date" value="2027-02-14" required></label></div>
+<div class="people-path" aria-label="Four adults, equal stay split"><span>1</span><i></i><span>2</span><i></i><span>3</span><i></i><span>4</span><strong>4 adults<br><small>Equal stay split</small></strong></div>
+<label>Optional ceiling for your stay share · USD<input name="maximum" type="number" min="0" max="100000" step="0.01" placeholder="Browse without a number"></label><p class="field-help">Stay, cleaning and listed taxes only. This is a private preview filter, not a saved budget or payment permission.</p>
+<button class="primary" type="submit">Explore whole homes <span aria-hidden="true">→</span></button></form>
+<div id="status" role="status" aria-live="polite"></div><section id="results" aria-label="Rental price comparisons"></section>
+<footer>People → shared plan → your approval.<br>Exploring never commits you.</footer></main></div></body></html>

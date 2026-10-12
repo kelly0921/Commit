@@ -44,6 +44,7 @@ export function createProductServer(service:ProductService, assetRoot=fileURLToP
         if(path==='/api/activity'){json(coordinator.communication.list(session));return;}
         if(path==='/api/agent'){json({...coordinator.authority.view(session),timeline:coordinator.timeline(session)});return;}
         if(path==='/api/updates'){json(coordinator.communication.preferences(session));return;}
+        if(path==='/api/constraints/price-guide'){json(service.priceGuide(session,url.searchParams.has('draftId')?url.searchParams.get('draftId'):undefined));return;}
         if(path==='/api/group') json(service.group(session));else if(path==='/api/constraints/me') json(service.ownConstraint(session));else if(path==='/api/catalog') json(service.catalog());else if(path==='/api/commitments/me'){invariant(service.commitments,'PAYMENTS_NOT_ENABLED',503);json(service.commitments.own(session));}else throw new ProductError('NOT_FOUND',404);return;
       }
       invariant(request.method==='POST','METHOD_NOT_ALLOWED',405);

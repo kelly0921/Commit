@@ -85,19 +85,33 @@ export function validateOffer(value:unknown,database?:ProductDatabase):OfferInpu
   if(v.cohortIds!==undefined){const ids=new Set(merchantDemand(database).map(r=>r.cohortId));invariant(Array.isArray(v.cohortIds)&&v.cohortIds.length<=500&&new Set(v.cohortIds).size===v.cohortIds.length&&v.cohortIds.every(id=>ids.has(id)),'INVALID_COHORT_SCOPE');}
   return v as OfferInput;
 }
-export function simulateGroupOffer(value:unknown,database?:ProductDatabase) {
+function evaluateOfferScenario(value:unknown,database?:ProductDatabase) {
   const input=validateOffer(value,database),rows=merchantDemand(database);
   const eligible=intents.filter((g,i)=>!g.purchased&&rows[i]!.constraintsCollected&&g.members.length>=(input.minimumGroupSize??2)&&(!input.startDate||g.targetDate>=input.startDate)&&(!input.endDate||g.endDate<=input.endDate)&&(!input.packageIds||input.packageIds.includes(g.packageId))&&(!input.cohortIds||input.cohortIds.includes(g.cohortId)));
   const rejected=input.discountPercent>OFFER_BOUNDARIES.maximumDiscountPercent||(input.startDate!==undefined&&input.startDate<OFFER_BOUNDARIES.eligibleStartDate)||(input.endDate!==undefined&&input.endDate>OFFER_BOUNDARIES.eligibleEndDate);
-  let newlyFeasibleGroups=0,projectedIncrementalGmvCents=0,estimatedDiscountCostCents=0,blockedGroupsByMerchantFloor=0;
-  if(!rejected)for(const g of eligible){
-    const before=solve(catalogFor(g),g.members),afterResult=solve(catalogFor(g,input.discountPercent),g.members);
+  let newlyFeasibleGroups=0,projectedIncrementalGmvCents=0,estimatedDiscountCostCents=0,blockedGroupsByMerchantFloor=0,beforeFeasibleGroups=0,afterFeasibleGroups=0;
+  for(const g of eligible){
+    const before=solve(catalogFor(g),g.members);if(before.feasible)beforeFeasibleGroups++;
+    if(rejected)continue;
+    const afterResult=solve(catalogFor(g,input.discountPercent),g.members);if(afterResult.feasible)afterFeasibleGroups++;
     if(afterResult.evaluations.some(e=>e.checks.some(c=>c.key.startsWith('merchant')&&!c.passed)))blockedGroupsByMerchantFloor++;
     if(!before.feasible&&afterResult.selected){newlyFeasibleGroups++;projectedIncrementalGmvCents+=afterResult.selected.totalCents;estimatedDiscountCostCents+=before.evaluations[0]!.totalCents-afterResult.selected.totalCents;}
   }
   // Consumer-side projection already checked private needs. Merchant code receives
   // only aggregate feasibility curves, never those needs or participant identities.
   const live=(database?.all<{data_json:string;curve_json:string}>('SELECT data_json,curve_json FROM merchant_demand_projection')??[]).map(r=>({row:JSON.parse(r.data_json) as MerchantDemand,curve:JSON.parse(r.curve_json) as {discountPercent:number;feasible:boolean;totalCents:number;blockedByMerchantFloor:boolean}[]})).filter(({row:r})=>r.stage!=='PURCHASED'&&r.constraintsCollected&&r.groupSize>=(input.minimumGroupSize??2)&&(!input.startDate||r.targetDate>=input.startDate)&&(!input.endDate||r.endDate<=input.endDate)&&(!input.packageIds||input.packageIds.includes(r.currentPackageId))&&(!input.cohortIds||input.cohortIds.includes(r.cohortId)));
-  if(!rejected)for(const {curve} of live){const before=curve[0]!,after=curve.find(p=>p.discountPercent===input.discountPercent)!;if(after.blockedByMerchantFloor)blockedGroupsByMerchantFloor++;if(!before.feasible&&after.feasible){newlyFeasibleGroups++;projectedIncrementalGmvCents+=after.totalCents;estimatedDiscountCostCents+=before.totalCents-after.totalCents;}}
-  return {input,readOnly:true,accepted:!rejected,eligibleGroups:eligible.length+live.length,newlyFeasibleGroups,projectedIncrementalGmvCents,estimatedDiscountCostCents,resultingMerchantRevenueCents:projectedIncrementalGmvCents,blockedByMerchantFloor:rejected||blockedGroupsByMerchantFloor>0,blockedGroupsByMerchantFloor,maximumAllowedDiscountPercent:OFFER_BOUNDARIES.maximumDiscountPercent,boundaries:OFFER_BOUNDARIES,message:rejected?`Requested terms exceed the merchant envelope. The largest allowed discount is ${OFFER_BOUNDARIES.maximumDiscountPercent}%; stays must be January–March 2027. No terms were changed.`:'Analysis only. Newly feasible does not predict purchases. Revenue is discounted incremental GMV before taxes/fees; discount cost applies only to newly feasible groups.'};
+  for(const {curve} of live){const before=curve[0]!;if(before.feasible)beforeFeasibleGroups++;if(rejected)continue;const after=curve.find(p=>p.discountPercent===input.discountPercent)!;if(after.feasible)afterFeasibleGroups++;if(after.blockedByMerchantFloor)blockedGroupsByMerchantFloor++;if(!before.feasible&&after.feasible){newlyFeasibleGroups++;projectedIncrementalGmvCents+=after.totalCents;estimatedDiscountCostCents+=before.totalCents-after.totalCents;}}
+  // Preserve the existing serialized result used by immutable simulation receipts
+  // and offer revalidation. Analytics are projected separately, never persisted
+  // into that commercial identity or used to grant additional authority.
+  const result={input,readOnly:true,accepted:!rejected,eligibleGroups:eligible.length+live.length,newlyFeasibleGroups,projectedIncrementalGmvCents,estimatedDiscountCostCents,resultingMerchantRevenueCents:projectedIncrementalGmvCents,blockedByMerchantFloor:rejected||blockedGroupsByMerchantFloor>0,blockedGroupsByMerchantFloor,maximumAllowedDiscountPercent:OFFER_BOUNDARIES.maximumDiscountPercent,boundaries:OFFER_BOUNDARIES,message:rejected?`Requested terms exceed the merchant envelope. The largest allowed discount is ${OFFER_BOUNDARIES.maximumDiscountPercent}%; stays must be January–March 2027. No terms were changed.`:'Analysis only. Newly feasible does not predict purchases. Revenue is discounted incremental GMV before taxes/fees; discount cost applies only to newly feasible groups.'};
+  return {result,beforeFeasibleGroups,afterFeasibleGroups:rejected?null:afterFeasibleGroups};
+}
+export function simulateGroupOffer(value:unknown,database?:ProductDatabase){return evaluateOfferScenario(value,database).result;}
+export function merchantSimulationImpact(value:unknown,database?:ProductDatabase){
+  const {result,beforeFeasibleGroups,afterFeasibleGroups}=evaluateOfferScenario(value,database);
+  return {scenarioEstimate:true,beforeFeasibleGroups,afterFeasibleGroups,newlyFeasibleGroups:result.newlyFeasibleGroups,
+    modeledIncrementalGmvCents:result.projectedIncrementalGmvCents,modeledIncrementalPaypalTpvCents:result.projectedIncrementalGmvCents,merchantDiscountCostCents:result.estimatedDiscountCostCents,
+    newlyFeasibleDefinition:'Infeasible before the intervention; feasible after it under all existing deterministic buyer, quality and merchant boundaries, within the same eligible cohort scope.',
+    message:'Scenario estimate only. GMV and PayPal TPV include discounted totals of newly feasible groups only. Potential PayPal volume assumes those groups replan, give fresh approvals and complete PayPal checkout; no purchase or processed payment is predicted. Discount cost covers those same newly feasible groups. No PayPal revenue, take rate or profit is estimated.'};
 }

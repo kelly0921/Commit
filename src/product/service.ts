@@ -8,6 +8,7 @@ import type { CaptureSagaService } from './capture-saga.js';
 import { catalogForGroup } from './catalog.js';
 import { ConsumerOfferService } from './offers.js';
 import { AuthorityService } from './authority.js';
+import { needsPriceGuide } from './needs-guide.js';
 
 export class ProductService {
   get offers(){return new ConsumerOfferService(this.database,this.commitments);}
@@ -39,6 +40,19 @@ export class ProductService {
     return {name:group.name,goal:goal.description,revision:goal.revision,state:progress?.state??goal.state,persona:fresh.persona,members,capturedCents:progress?.capturedCents??0,committedCount:progress?.committedCount??0,authorizedCents:progress?.authorizedCents??0,ready:progress?.ready??false,captureDetected:progress?.captureDetected??false,commitmentDeadline:progress?.deadline??null,paymentsAvailable:this.commitments?.available??false,phase:this.sagas?3:this.commitments?2:1,saga:this.sagas?.view(fresh)??null,negativeTestAvailable:this.sagas?.allowNegativeTest??false,availableOffers:this.offers.available(fresh),appliedOffer:this.offers.applied(fresh),proposal:current && result ? {id:current.id,revision:current.revision,feasible:result.feasible,package:result.selected ? publicPackage(result.catalogSnapshot.find(p=>p.id===result.selected!.packageId)!):null,totalCents:result.selected?.totalCents ?? null,explanation:current.explanation,explanationSource:current.explanation_source,valuePolicyVersion:result.policyVersion,ownAllocation:result.selected?.allocations.find(a=>a.userId===fresh.persona) ?? null,evaluations:result.evaluations.map(e=>this.projection(e,fresh.persona,result))}:null};
   }
   ownConstraint(session: Session) {const fresh=this.participant(session);const row=this.database.constraintRows(fresh.group_id).find(c=>c.user_id===fresh.persona)!;return {statement:row.statement,parsed:validateParsed(JSON.parse(row.parsed_json)),confirmed:!!row.confirmed,source:row.source,version:row.version,revision:this.database.goal(fresh.group_id).revision};}
+  priceGuide(session: Session, draftId?: unknown) {
+    const fresh=this.participant(session),own=this.ownConstraint(fresh);let parsed=own.parsed;
+    if(draftId !== undefined) {
+      invariant(typeof draftId==='string','INVALID_DRAFT');
+      const draft=this.database.get<{parsed_json:string;goal_revision:number;created_at:string}>('SELECT parsed_json,goal_revision,created_at FROM constraint_drafts WHERE id=? AND group_id=? AND user_id=?',draftId,fresh.group_id,fresh.persona);
+      invariant(draft,'DRAFT_NOT_FOUND',404);invariant(Date.now()-Date.parse(draft.created_at)<600000,'DRAFT_EXPIRED',409);
+      invariant(draft.goal_revision===own.revision,'PLAN_CHANGED_TRY_AGAIN',409);parsed=validateParsed(JSON.parse(draft.parsed_json),true);
+    }
+    const merchant=this.database.get<{merchant_id:string}>('SELECT merchant_id FROM groups WHERE id=?',fresh.group_id)!.merchant_id;
+    const catalog=this.catalogPackages(fresh.group_id);invariant(catalog.every(p=>p.merchantId===merchant),'MERCHANT_IDENTITY_MISMATCH',409);
+    const identities=this.database.all<{user_id:string}>('SELECT user_id FROM group_members WHERE group_id=? ORDER BY user_id',fresh.group_id).map(m=>m.user_id);
+    return needsPriceGuide(catalog,identities,fresh.persona,parsed,own.revision);
+  }
   async interpret(session: Session, statement: unknown) {
     const fresh=this.participant(session);this.database.assertMutable(fresh.group_id);invariant(typeof statement==='string' && statement.trim().length>=10 && statement.length<=2000,'INVALID_STATEMENT');const revision=this.database.goal(fresh.group_id).revision;
     const interpreted=await this.ai.interpret(statement.trim());const parsed=validateParsed(interpreted.parsed,true);invariant(interpreted.source==='OPENAI'||interpreted.source==='OFFLINE_DEMO','INVALID_AI_SOURCE',502);

@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {invariant,ProductError} from '../product/domain.js';
-import {merchantDemand,demandMetrics,simulateGroupOffer,DEMAND_VERSION,OFFER_BOUNDARIES} from './demand.js';
+import {merchantDemand,demandMetrics,simulateGroupOffer,merchantSimulationImpact,DEMAND_VERSION,OFFER_BOUNDARIES} from './demand.js';
 import {executeMerchantTurn} from './provider.js';
 import {ProductDatabase} from '../product/db.js';
 import {MerchantOfferService} from './offers.js';
@@ -48,7 +48,7 @@ export function createMerchantServer(options:Options={}) {
       let size=0;const chunks:Buffer[]=[];for await(const chunk of req){size+=chunk.length;invariant(size<=(path.endsWith('agent-turn')?350000:16000),'BODY_TOO_LARGE',413);chunks.push(chunk);}
       let data:unknown;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new ProductError('INVALID_JSON');}
       if(path==='/api/merchant/policy'){invariant(options.offers,'OFFERS_NOT_ENABLED',503);json(new AuthorityService(options.offers.database).policy(session.id,data));return;}
-      if(path.endsWith('simulate')){json(options.offers?options.offers.simulate(session.id,data):simulateGroupOffer(data));return;}
+      if(path.endsWith('simulate')){const result=options.offers?options.offers.simulate(session.id,data):simulateGroupOffer(data),impact=merchantSimulationImpact(data,options.offers?.database);json({...result,impact,message:result.accepted?impact.message:result.message});return;}
       if(path.includes('/offers/')){
         invariant(options.offers,'OFFERS_NOT_ENABLED',503);invariant(data&&typeof data==='object'&&!Array.isArray(data),'INVALID_OFFER');const v=data as Record<string,unknown>;
         if(path.endsWith('/draft'))json(options.offers.draft(session.id,data));
