@@ -1,3 +1,5 @@
+import {loadCommitFont} from './font.js';
+loadCommitFont();
 import {MerchantPolicyPanel} from './policy.js';
 import React,{useEffect,useState,useMemo,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -15,7 +17,7 @@ type UnlockWidget=AgWidgetData<{cohort:{id:string}[]},AgWidgetDataFormat<{discou
 type Registry=Omit<AgDefaultRegistry,'widgets'> & {widgets:readonly (AgDefaultWidgetDefinition|AgWidgetDefinition<'conversion-unlock',UnlockWidget>)[]};
 type UiContext={transport:Transport;subscribe:(listener:(reason:'scope'|'simulation')=>void)=>()=>void;scope:()=>Promise<string[]>;setScopeReader:(reader:()=>Promise<string[]>)=>void;showSimulation:(result:Simulation)=>void;getSimulation:()=>Simulation|null;status:(text:string)=>void};
 const money=(cents:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2,minimumFractionDigits:cents%100===0?0:2}).format(cents/100);
-const theme=studioTheme.withParams({accentColor:'#A64B1F',backgroundColor:'#FFFDFC',textColor:'#2A211C',borderColor:'#DDD2C5',fontFamily:'Inter, system-ui, sans-serif',fontSize:13,borderRadius:9,studioCanvasBackgroundColor:'#FAF6EF',studioCanvasPadding:16,studioCanvasMinWidth:720,studioMinWidth:320,studioWidgetBorderRadius:14,studioWidgetTitleTextColor:'#2A211C',studioWidgetTitleFontSize:13,studioWidgetTitleFontWeight:600,studioAiPanelWidth:320,studioPanelWidth:210,studioValueWidgetFontSize:28,chartPaletteFills1Color:'#A64B1F',chartPaletteFills2Color:'#B88746',chartPaletteFills3Color:'#5D6847',chartPaletteFills4Color:'#A99883',chartPaletteStrokes1Color:'#A64B1F',chartPaletteStrokes2Color:'#B88746',chartPaletteStrokes3Color:'#5D6847',chartPaletteStrokes4Color:'#A99883'});
+const theme=studioTheme.withParams({accentColor:'#A64B1F',backgroundColor:'#FFFDFC',textColor:'#2A211C',borderColor:'#DDD2C5',fontFamily:'Plus Jakarta Sans, system-ui, sans-serif',fontSize:13,borderRadius:9,studioCanvasBackgroundColor:'#FAF6EF',studioCanvasPadding:16,studioCanvasMinWidth:720,studioMinWidth:320,studioWidgetBorderRadius:14,studioWidgetTitleTextColor:'#2A211C',studioWidgetTitleFontSize:13,studioWidgetTitleFontWeight:600,studioAiPanelWidth:320,studioPanelWidth:210,studioValueWidgetFontSize:28,chartPaletteFills1Color:'#A64B1F',chartPaletteFills2Color:'#B88746',chartPaletteFills3Color:'#5D6847',chartPaletteFills4Color:'#A99883',chartPaletteStrokes1Color:'#A64B1F',chartPaletteStrokes2Color:'#B88746',chartPaletteStrokes3Color:'#5D6847',chartPaletteStrokes4Color:'#A99883'});
 
 function ConversionUnlock(props:AgWidgetParams<UnlockWidget>) {
   const context=props.context as UiContext;
